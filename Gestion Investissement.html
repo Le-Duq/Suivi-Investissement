@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Suivi Investissements et Gains</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f7fc;
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }
+        header {
+            background-color: #4CAF50;
+            color: white;
+            text-align: center;
+            padding: 1em 0;
+        }
+        h1 {
+            margin: 0;
+        }
+        .container {
+            padding: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+        th, td {
+            padding: 10px;
+            text-align: center;
+        }
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+        td {
+            background-color: #f9f9f9;
+        }
+        .charts-row {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 30px;
+        }
+        .chart-container {
+            width: 48%;
+            height: 400px;
+        }
+        .btn {
+            padding: 10px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        .btn:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>Suivi de mes Investissements et Gains</h1>
+</header>
+
+<div class="container">
+    <h2>Tableau de Suivi des Investissements</h2>
+    <table id="investmentTable">
+        <thead>
+            <tr>
+                <th>Mois</th>
+                <th>Investi en ETF (€)</th>
+                <th>Investi en Crypto (€)</th>
+                <th>Investi en Crowdlending (€)</th>
+                <th>Total Investi (€)</th>
+                <th>Gains (€)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Lignes de mois à venir dans la fonction renderTable -->
+        </tbody>
+    </table>
+
+    <!-- Graphiques côte à côte -->
+    <div class="charts-row">
+        <div class="chart-container">
+            <h3>Investi en ETF (€)</h3>
+            <canvas id="etfChart"></canvas>
+        </div>
+        <div class="chart-container">
+            <h3>Investi en Crypto (€)</h3>
+            <canvas id="cryptoChart"></canvas>
+        </div>
+    </div>
+
+    <div class="charts-row">
+        <div class="chart-container">
+            <h3>Investi en Crowdlending (€)</h3>
+            <canvas id="crowdlendingChart"></canvas>
+        </div>
+        <div class="chart-container">
+            <h3>Gains (€)</h3>
+            <canvas id="gainsChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<script>
+// Liste des mois
+const months = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
+
+// Fonction pour récupérer les données du stockage local
+function getStoredData() {
+    const storedData = localStorage.getItem("investmentsData");
+    if (storedData) {
+        return JSON.parse(storedData);
+    } else {
+        return months.map(month => ({
+            mois: month,
+            etf: 0,
+            crypto: 0,
+            crowdlending: 0,
+            gains: 0
+        }));
+    }
+}
+
+// Fonction pour enregistrer les données dans le stockage local
+function saveData() {
+    localStorage.setItem("investmentsData", JSON.stringify(investmentsData));
+}
+
+// Données initiales, vides mais modifiables
+let investmentsData = getStoredData();
+
+// Fonction pour rendre les lignes du tableau avec des champs input
+function renderTable() {
+    const tableBody = document.getElementById('investmentTable').getElementsByTagName('tbody')[0];
+    tableBody.innerHTML = ''; // Vider le tableau avant de le redessiner
+
+    investmentsData.forEach((data, index) => {
+        const row = tableBody.insertRow();
+        
+        // Mois (cellule non modifiable)
+        row.insertCell(0).textContent = data.mois;
+        
+        // Cases modifiables pour les investissements
+        row.insertCell(1).innerHTML = `<input type="number" value="${data.etf}" onchange="updateData(${index}, 'etf', this.value)">`;
+        row.insertCell(2).innerHTML = `<input type="number" value="${data.crypto}" onchange="updateData(${index}, 'crypto', this.value)">`;
+        row.insertCell(3).innerHTML = `<input type="number" value="${data.crowdlending}" onchange="updateData(${index}, 'crowdlending', this.value)">`;
+
+        // Total Investi (calculé automatiquement)
+        row.insertCell(4).textContent = (data.etf + data.crypto + data.crowdlending).toFixed(2);
+
+        // Gains (modifiable)
+        row.insertCell(5).innerHTML = `<input type="number" value="${data.gains}" onchange="updateData(${index}, 'gains', this.value)">`;
+    });
+
+    updateCharts();
+}
+
+// Fonction pour mettre à jour les données lorsque l'utilisateur modifie une case
+function updateData(index, type, value) {
+    investmentsData[index][type] = parseFloat(value) || 0; // Si la valeur est vide, la remplacer par 0
+    saveData(); // Sauvegarder les données après chaque modification
+    renderTable();
+}
+
+// Fonction pour mettre à jour tous les graphiques
+function updateCharts() {
+    const labels = investmentsData.map(data => data.mois);
+    const etfData = investmentsData.map(data => data.etf);
+    const cryptoData = investmentsData.map(data => data.crypto);
+    const crowdlendingData = investmentsData.map(data => data.crowdlending);
+    const gainsData = investmentsData.map(data => data.gains);
+
+    const ctxEtf = document.getElementById('etfChart').getContext('2d');
+    const ctxCrypto = document.getElementById('cryptoChart').getContext('2d');
+    const ctxCrowdlending = document.getElementById('crowdlendingChart').getContext('2d');
+    const ctxGains = document.getElementById('gainsChart').getContext('2d');
+
+    // Graphique pour Investissements en ETF
+    new Chart(ctxEtf, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Investi en ETF (€)',
+                data: etfData,
+                borderColor: 'rgba(75, 192, 192, 1)',
+                fill: false,
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+
+    // Graphique pour Investissements en Crypto
+    new Chart(ctxCrypto, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Investi en Crypto (€)',
+                data: cryptoData,
+                borderColor: 'rgba(255, 99, 132, 1)',
+                fill: false,
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+
+    // Graphique pour Investissements en Crowdlending
+    new Chart(ctxCrowdlending, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Investi en Crowdlending (€)',
+                data: crowdlendingData,
+                borderColor: 'rgba(54, 162, 235, 1)',
+                fill: false,
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+
+    // Graphique pour Gains
+    new Chart(ctxGains, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Gains (€)',
+                data: gainsData,
+                borderColor: 'rgba(255, 159, 64, 1)',
+                fill: false,
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+
+// Initialiser la table et les graphiques au chargement de la page
+renderTable();
+
+</script>
+
+</body>
+</html>
