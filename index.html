@@ -1,9 +1,20 @@
+
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Suivi Investissements et Gains</title>
+    <link rel="manifest" href="manifest.json">
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').then(function(registration) {
+                console.log('Service Worker enregistré avec succès:', registration.scope);
+            }).catch(function(error) {
+                console.log('Échec de l’enregistrement du Service Worker:', error);
+            });
+        }
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
@@ -18,9 +29,6 @@
             color: white;
             text-align: center;
             padding: 1em 0;
-        }
-        h1 {
-            margin: 0;
         }
         .container {
             padding: 20px;
@@ -44,25 +52,20 @@
         td {
             background-color: #f9f9f9;
         }
-        .charts-row {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 30px;
-        }
         .chart-container {
-            width: 48%;
+            margin-top: 40px;
+        }
+        canvas {
+            max-width: 100%;
             height: 400px;
         }
-        .btn {
-            padding: 10px 15px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            cursor: pointer;
-            margin-top: 20px;
+        .gain-positive {
+            background-color: #d4edda;
+            color: #155724;
         }
-        .btn:hover {
-            background-color: #45a049;
+        .gain-negative {
+            background-color: #f8d7da;
+            color: #721c24;
         }
     </style>
 </head>
@@ -82,193 +85,124 @@
                 <th>Investi en Crypto (€)</th>
                 <th>Investi en Crowdlending (€)</th>
                 <th>Total Investi (€)</th>
+                <th>Compte (€)</th>
                 <th>Gains (€)</th>
             </tr>
         </thead>
-        <tbody>
-            <!-- Lignes de mois à venir dans la fonction renderTable -->
-        </tbody>
+        <tbody></tbody>
     </table>
 
-    <!-- Graphiques côte à côte -->
-    <div class="charts-row">
-        <div class="chart-container">
-            <h3>Investi en ETF (€)</h3>
-            <canvas id="etfChart"></canvas>
-        </div>
-        <div class="chart-container">
-            <h3>Investi en Crypto (€)</h3>
-            <canvas id="cryptoChart"></canvas>
-        </div>
-    </div>
-
-    <div class="charts-row">
-        <div class="chart-container">
-            <h3>Investi en Crowdlending (€)</h3>
-            <canvas id="crowdlendingChart"></canvas>
-        </div>
-        <div class="chart-container">
-            <h3>Gains (€)</h3>
-            <canvas id="gainsChart"></canvas>
-        </div>
+    <div class="chart-container">
+        <h3>Évolution du Compte et des Gains</h3>
+        <canvas id="mainChart"></canvas>
     </div>
 </div>
 
 <script>
-// Liste des mois
 const months = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
 
-// Fonction pour récupérer les données du stockage local
 function getStoredData() {
     const storedData = localStorage.getItem("investmentsData");
-    if (storedData) {
-        return JSON.parse(storedData);
-    } else {
-        return months.map(month => ({
-            mois: month,
-            etf: 0,
-            crypto: 0,
-            crowdlending: 0,
-            gains: 0
-        }));
-    }
+    return storedData ? JSON.parse(storedData) : months.map(month => ({
+        mois: month,
+        etf: 0,
+        crypto: 0,
+        crowdlending: 0,
+        compte: 0
+    }));
 }
 
-// Fonction pour enregistrer les données dans le stockage local
 function saveData() {
     localStorage.setItem("investmentsData", JSON.stringify(investmentsData));
 }
 
-// Données initiales, vides mais modifiables
 let investmentsData = getStoredData();
 
-// Fonction pour rendre les lignes du tableau avec des champs input
 function renderTable() {
     const tableBody = document.getElementById('investmentTable').getElementsByTagName('tbody')[0];
-    tableBody.innerHTML = ''; // Vider le tableau avant de le redessiner
+    tableBody.innerHTML = '';
+
+    let totalEtf = 0, totalCrypto = 0, totalCrowd = 0, totalInvesti = 0, totalCompte = 0, totalGains = 0;
 
     investmentsData.forEach((data, index) => {
         const row = tableBody.insertRow();
-        
-        // Mois (cellule non modifiable)
         row.insertCell(0).textContent = data.mois;
-        
-        // Cases modifiables pour les investissements
-        row.insertCell(1).innerHTML = `<input type="number" value="${data.etf}" onchange="updateData(${index}, 'etf', this.value)">`;
-        row.insertCell(2).innerHTML = `<input type="number" value="${data.crypto}" onchange="updateData(${index}, 'crypto', this.value)">`;
-        row.insertCell(3).innerHTML = `<input type="number" value="${data.crowdlending}" onchange="updateData(${index}, 'crowdlending', this.value)">`;
 
-        // Total Investi (calculé automatiquement)
-        row.insertCell(4).textContent = (data.etf + data.crypto + data.crowdlending).toFixed(2);
+        row.insertCell(1).innerHTML = `<input type="number" value="${data.etf || ''}" onchange="updateData(${index}, 'etf', this.value)">`;
+        row.insertCell(2).innerHTML = `<input type="number" value="${data.crypto || ''}" onchange="updateData(${index}, 'crypto', this.value)">`;
+        row.insertCell(3).innerHTML = `<input type="number" value="${data.crowdlending || ''}" onchange="updateData(${index}, 'crowdlending', this.value)">`;
 
-        // Gains (modifiable)
-        row.insertCell(5).innerHTML = `<input type="number" value="${data.gains}" onchange="updateData(${index}, 'gains', this.value)">`;
+        const total = (data.etf + data.crypto + data.crowdlending);
+        row.insertCell(4).textContent = isNaN(total) ? '0.00' : total.toFixed(2);
+
+        row.insertCell(5).innerHTML = `<input type="number" value="${data.compte || ''}" onchange="updateData(${index}, 'compte', this.value)">`;
+
+        const gains = data.compte - total;
+        const gainCell = row.insertCell(6);
+        gainCell.textContent = isNaN(gains) ? '0.00' : gains.toFixed(2);
+        gainCell.className = gains > 0 ? 'gain-positive' : gains < 0 ? 'gain-negative' : '';
+
+        totalEtf += data.etf || 0;
+        totalCrypto += data.crypto || 0;
+        totalCrowd += data.crowdlending || 0;
+        totalInvesti += isNaN(total) ? 0 : total;
+        totalCompte += data.compte || 0;
+        totalGains += isNaN(gains) ? 0 : gains;
     });
 
-    updateCharts();
+    const totalRow = tableBody.insertRow();
+    totalRow.style.fontWeight = 'bold';
+    totalRow.insertCell(0).textContent = "Total";
+    totalRow.insertCell(1).textContent = totalEtf.toFixed(2);
+    totalRow.insertCell(2).textContent = totalCrypto.toFixed(2);
+    totalRow.insertCell(3).textContent = totalCrowd.toFixed(2);
+    totalRow.insertCell(4).textContent = totalInvesti.toFixed(2);
+    totalRow.insertCell(5).textContent = totalCompte.toFixed(2);
+    totalRow.insertCell(6).textContent = totalGains.toFixed(2);
+
+    updateChart();
 }
 
-// Fonction pour mettre à jour les données lorsque l'utilisateur modifie une case
 function updateData(index, type, value) {
-    investmentsData[index][type] = parseFloat(value) || 0; // Si la valeur est vide, la remplacer par 0
-    saveData(); // Sauvegarder les données après chaque modification
+    investmentsData[index][type] = parseFloat(value) || 0;
+    saveData();
     renderTable();
 }
 
-// Fonction pour mettre à jour tous les graphiques
-function updateCharts() {
+let mainChart;
+
+function updateChart() {
     const labels = investmentsData.map(data => data.mois);
-    const etfData = investmentsData.map(data => data.etf);
-    const cryptoData = investmentsData.map(data => data.crypto);
-    const crowdlendingData = investmentsData.map(data => data.crowdlending);
-    const gainsData = investmentsData.map(data => data.gains);
-
-    const ctxEtf = document.getElementById('etfChart').getContext('2d');
-    const ctxCrypto = document.getElementById('cryptoChart').getContext('2d');
-    const ctxCrowdlending = document.getElementById('crowdlendingChart').getContext('2d');
-    const ctxGains = document.getElementById('gainsChart').getContext('2d');
-
-    // Graphique pour Investissements en ETF
-    new Chart(ctxEtf, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Investi en ETF (€)',
-                data: etfData,
-                borderColor: 'rgba(75, 192, 192, 1)',
-                fill: false,
-                tension: 0.1
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: {
-                y: {
-                    beginAtZero: true
-                }
-            }
-        }
+    const accountData = investmentsData.map(data => data.compte || 0);
+    const gainsData = investmentsData.map(data => {
+        const total = (data.etf + data.crypto + data.crowdlending);
+        const gains = data.compte - total;
+        return isNaN(gains) ? 0 : parseFloat(gains.toFixed(2));
     });
 
-    // Graphique pour Investissements en Crypto
-    new Chart(ctxCrypto, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Investi en Crypto (€)',
-                data: cryptoData,
-                borderColor: 'rgba(255, 99, 132, 1)',
-                fill: false,
-                tension: 0.1
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: {
-                y: {
-                    beginAtZero: true
-                }
-            }
-        }
-    });
+    if (mainChart) mainChart.destroy();
 
-    // Graphique pour Investissements en Crowdlending
-    new Chart(ctxCrowdlending, {
+    const ctx = document.getElementById('mainChart').getContext('2d');
+    mainChart = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
-            datasets: [{
-                label: 'Investi en Crowdlending (€)',
-                data: crowdlendingData,
-                borderColor: 'rgba(54, 162, 235, 1)',
-                fill: false,
-                tension: 0.1
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: {
-                y: {
-                    beginAtZero: true
+            datasets: [
+                {
+                    label: 'Compte (€)',
+                    data: accountData,
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    fill: false,
+                    tension: 0.1
+                },
+                {
+                    label: 'Gains (€)',
+                    data: gainsData,
+                    borderColor: 'rgba(255, 159, 64, 1)',
+                    fill: false,
+                    tension: 0.1
                 }
-            }
-        }
-    });
-
-    // Graphique pour Gains
-    new Chart(ctxGains, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Gains (€)',
-                data: gainsData,
-                borderColor: 'rgba(255, 159, 64, 1)',
-                fill: false,
-                tension: 0.1
-            }]
+            ]
         },
         options: {
             responsive: true,
@@ -281,9 +215,7 @@ function updateCharts() {
     });
 }
 
-// Initialiser la table et les graphiques au chargement de la page
 renderTable();
-
 </script>
 
 </body>
